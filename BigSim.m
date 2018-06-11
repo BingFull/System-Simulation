@@ -7,11 +7,22 @@ close all
 % hold on
 
 %init parameters in Canteen queuing system
-S23 = 80;
-s23 = 60;
-S45 = 80;
-s45 = 60;
+S23 = 100;
+s23 = 80;
+S45 = 100;
+s45 = 80;
 alpha = 14.8274; %Rayleigh distribution parameter
+
+get_up_mu_boy = 93.3616;
+get_up_sigma_boy = sqrt(24.7631);
+get_up_mu_girl = 93.3616;
+get_up_sigma_girl = sqrt(24.7631);
+wash_up_mu_boy = 23.7833;
+wash_sigma_boy = 8.6084;
+wash_up_mu_girl = 30.5588;
+wash_up_sigma_girl = 7.2387;
+repast_mu = 7.917;
+repast_sigma = sqrt(16.63);
 
 %queue was used for customer waiting
 wait_food_queue23 = []; %Record the time to wait for food 
@@ -22,14 +33,14 @@ supply_interval = 1800; %Time interval for supply food
 food_make_time_l = 900; %Lower limit of food production time
 food_make_time_h = 1800; %Upper limit of food production time
 
-wait_for_elevator_queue = zeros(8,40);
-elevator_loc = 1;
-elevator_num_threshold = 10;
-num_in_elevator = 0;
-time_every_floor = 5;
-elevator_dst = 0;
-queue_in_elevator = [];
-elevator_door = 0; 
+wait_for_elevator_queue = zeros(8,40); %record the student waiting for elevator in every floor
+elevator_loc = 1;  %elevator's location
+elevator_num_threshold = 10; %The maximum number of people in the elevator 
+num_in_elevator = 0; %The number of people in the current elevator
+time_every_floor = 5; 
+elevator_dst = 0; %elevator's destination
+queue_in_elevator = []; %record the students in the current elevator
+elevator_door = 0; %the status of elevator door 0:close  1:open
 
 
 NodeList=[1 2 3 4 5 6];
@@ -66,12 +77,6 @@ Event_queue= [];
 %set the student number
 student_num = 100;
 
-%time=sort(randn(1,student_num));
-t1 = randn([1, student_num]);
-t2 = randn([1, student_num]);
-t = t1 * 24.7631 + 93.3616 + t2 * sqrt(8.6084) + 23.7833;
-time = sort(t);
-
 c_upper=triu(c);
 temp = tril(ones(l,l))-eye(l);
 c_upper = c_upper - temp;
@@ -81,16 +86,17 @@ for t=1:student_num
     s(t).gender = randi(2,1);%1 for male and 2 for female
     if  s(t).gender == 1
         s(t).speed = 5;
+        s(t).StartTime = get_up_sigma_boy*rand() + get_up_mu_boy + wash_sigma_boy*rand() + wash_up_mu_boy;
     else
         s(t).speed = 3;
+        s(t).StartTime = get_up_sigma_girl*rand() + get_up_mu_girl + wash_up_sigma_girl*rand() + wash_up_mu_girl;
     end
-    
-    s(t).StartTime = time(t);
     s(t).source = 1; % simple version for this demo
     s(t).dest = 6;
     s(t).loc = 1;
     s(t).last_node = 0;
     s(t).food_require = food_require();
+    s(t).get_food_time = 0;
     s(t).floor = unidrnd(8);
     s(t).left_elevator = 0;
     s(t).left_canteen_time = 0;
@@ -125,7 +131,7 @@ Event_queue = insert_Event_queue_new(Event_queue, supply_interval, -11, 0);
 Event_queue = insert_Event_queue_new(Event_queue, supply_interval, -11, 1);
 ttt = 0;
 
-endTime = 6000
+endTime = 8000
 
 %eventID:
 %1: leaving a node
@@ -174,20 +180,21 @@ while(~isempty(Event_queue) && t < endTime)
     if type == -21  %elevator close the door
         elevator_door = 0;
         if elevator_loc == 1 
-            for i = 8:-1:1
+            for i = 8:-1:1  %check the queue to find the destination
                 if wait_for_elevator_queue(i,1) ~= 0
                     elevator_dst = i;
                     break;
                 end
             end
             if i == 1
-                elevator_dst = 0;
+                elevator_dst = 0; %there is no one call for the elevator currently
             else
+                %elevator move to the destination
                 Event_queue = insert_Event_queue_new(Event_queue,t+time_every_floor*(elevator_dst-1), -22, elevator_dst);
             end
         else
             if num_in_elevator < elevator_num_threshold
-                if wait_for_elevator_queue(elevator_loc,1) ~= 0
+                if wait_for_elevator_queue(elevator_loc,1) ~= 0 %students waiting for elevator get in the elevator
                     [wait_for_elevator_queue, pop_id] = pop_wait_for_elevator_queue(wait_for_elevator_queue,elevator_loc,elevator_num_threshold-num_in_elevator);
                     while(~isempty(pop_id))
                         temp_id = pop_id(1);
@@ -207,7 +214,7 @@ while(~isempty(Event_queue) && t < endTime)
     elseif type == -22 %elevator change the loc
        elevator_loc = id;
        elevator_door = 1;
-       if elevator_loc == 1
+       if elevator_loc == 1 %arrive the ground floor
            while(num_in_elevator ~= 0)
                temp_id = queue_in_elevator(1);
                s(temp_id).left_elevator = t;
@@ -219,7 +226,7 @@ while(~isempty(Event_queue) && t < endTime)
            queue_in_elevator = [];
            elevator_dst = 0;
            Event_queue = insert_Event_queue_new(Event_queue,t+10 + 50 * rand(), -21, elevator_loc);
-       elseif elevator_loc == elevator_dst
+       elseif elevator_loc == elevator_dst %arrive the highest floor which there is someone calling for elevator
            elevator_dst = 1;
            time_elevator_close = t + 10 + 50 * rand();
            Event_queue = insert_Event_queue_new(Event_queue,time_elevator_close, -21, elevator_loc);
@@ -232,7 +239,7 @@ while(~isempty(Event_queue) && t < endTime)
                     pop_id = pop_id(2:length(pop_id));
                 end
            end
-       elseif elevator_dst == 1 
+       elseif elevator_dst == 1 %the elevator is heading to the ground floor
            if wait_for_elevator_queue(elevator_loc,1) ~= 0 && num_in_elevator < elevator_num_threshold
                [wait_for_elevator_queue, pop_id] = pop_wait_for_elevator_queue(wait_for_elevator_queue,elevator_loc,elevator_num_threshold-num_in_elevator);
                 while(~isempty(pop_id))
@@ -244,12 +251,13 @@ while(~isempty(Event_queue) && t < endTime)
                 time_elevator_close = t + 10 + 50 * rand();
                 Event_queue = insert_Event_queue_new(Event_queue,time_elevator_close, -21, elevator_loc);
            else
+               % when the elevator don't stay when it is full
                 Event_queue = insert_Event_queue_new(Event_queue,t+time_every_floor, -22, elevator_loc-1);
            end
        end
 
-    elseif type == -23  %arrival the elevator
-        if elevator_loc == s(id).floor && elevator_door == 1
+    elseif type == -23  %reach the elevator
+        if elevator_loc == s(id).floor && elevator_door == 1 %the elevator is stay in the same floor and the door is open
             if num_in_elevator < elevator_num_threshold
                 queue_in_elevator = [queue_in_elevator id];
                 num_in_elevator = num_in_elevator + 1;
@@ -259,10 +267,10 @@ while(~isempty(Event_queue) && t < endTime)
                 wait_for_elevator_queue(s(id).floor,1) = wait_for_elevator_queue(s(id).floor,1) + 1;
             end
         elseif wait_for_elevator_queue(s(id).floor,1) == 0
-            temp_num_in_queue = wait_for_elevator_queue(s(id).floor,1);
+            temp_num_in_queue = wait_for_elevator_queue(s(id).floor,1); %join the queue
             wait_for_elevator_queue(s(id).floor,temp_num_in_queue+2) = id;
             wait_for_elevator_queue(s(id).floor,1) = wait_for_elevator_queue(s(id).floor,1) + 1;
-            if elevator_loc == 1 && elevator_dst == 0
+            if elevator_loc == 1 && elevator_dst == 0 %call for the elevator
                 for i = 8:-1:1
                     if wait_for_elevator_queue(i,1) ~= 0
                         elevator_dst = i;
@@ -304,10 +312,11 @@ while(~isempty(Event_queue) && t < endTime)
                     %sent the served student to next node
                     s(id_temp).loc = 3;
                     s(id_temp).last_node = 2;
-                    s(id_temp).left_canteen_time = t;
-                    ttt = ttt+1;
-                    Event_queue = insert_Event_queue_new(Event_queue, t, 2,s(id_temp).id);
-                    disp(['Time:',num2str(t),', student ',num2str(id_temp),' leveing queue process of node 2.']);
+                    temp_t = t + (repast_sigma*rand() + repast_mu)*60; %repast
+                    s(id_temp).left_canteen_time = temp_t;
+                    s(id_temp).get_food_time = t;
+                    Event_queue = insert_Event_queue_new(Event_queue, temp_t, 2,s(id_temp).id);
+                    disp(['Time:',num2str(temp_t),', student ',num2str(id_temp),' leveing queue process of node 2.']);
                 else
                     break;
                 end
@@ -322,10 +331,11 @@ while(~isempty(Event_queue) && t < endTime)
                     %sent the served student to next node
                     s(id_temp).loc = 5;
                     s(id_temp).last_node = 4;
-                    s(id_temp).left_canteen_time = t;
-                    ttt = ttt+1;
-                    Event_queue = insert_Event_queue_new(Event_queue, t, 2,s(id_temp).id);
-                    disp(['Time:',num2str(t),', student ',num2str(id_temp),' leveing queue process of node 4.']);
+                    temp_t = t + (repast_sigma*rand() + repast_mu)*60; %repast
+                    s(id_temp).left_canteen_time = temp_t;
+                    s(id_temp).get_food_time = t;
+                    Event_queue = insert_Event_queue_new(Event_queue, temp_t, 2,s(id_temp).id);
+                    disp(['Time:',num2str(temp_t),', student ',num2str(id_temp),' leveing queue process of node 4.']);
                 else
                     break;
                 end
@@ -398,38 +408,33 @@ while(~isempty(Event_queue) && t < endTime)
                 t_service = t + raylrnd(alpha);
                 %insert the event into event queue
                 Event_queue = insert_Event_queue_new(Event_queue, t_service, 22,s(id).id);
-                %Event_queue = insert_Event_queue(Event_queue,t_service, 2);
                 server_status23 = 1;%set the server into busy
-
             %else, join the queue
             else
                 queue23 = [queue23 s(id).id];
-                %queue_length = [queue_length length(queue)];
             end
         %else, join the queue
         else
             queue23 = [queue23 s(id).id]; 
-           
-            %queue_length = [queue_length length(queue)];
         end
     elseif type ==22 %serving finish of a queue edge 23
         if server_status23 == 1
             if s(id).food_require < food_left23
                 food_left23 = food_left23 - s(id).food_require;
-                %sent the served student to next node
                 s(id).loc = 3;
                 s(id).last_node = 2;
-                s(id).left_canteen_time = t;
-                ttt = ttt+1;
-                Event_queue = insert_Event_queue_new(Event_queue, t, 2,s(id).id);
-                disp(['Time:',num2str(t),', student ',num2str(id),' leaveing queue process of node 2.']);
+                temp_t = t + (repast_sigma*rand() + repast_mu)*60; %repast
+                s(id).left_canteen_time = temp_t;
+                s(id).get_food_time = t;
+                %sent the served student to next node
+                Event_queue = insert_Event_queue_new(Event_queue, temp_t, 2,s(id).id);
+                disp(['Time:',num2str(temp_t),', student ',num2str(id),' leaveing queue process of node 2.']);
             else
                 wait_food_queue23 = [wait_food_queue23 id];
             end
             
            server_status23 = 0;
            t_service = 0;
-          % w(2,3) = w(2,3) - 1;
             
      
            %check whether there is customer waiting in the queue
@@ -474,13 +479,14 @@ while(~isempty(Event_queue) && t < endTime)
         if server_status45 == 1
             if s(id).food_require < food_left45
                 food_left45 = food_left45 - s(id).food_require;
-               %sent the served student to next node
                 s(id).loc = 5;
                 s(id).last_node = 4;
-                s(id).left_canteen_time = t;
-                ttt = ttt+1;
-                Event_queue = insert_Event_queue_new(Event_queue, t, 2,s(id).id);
-                disp(['Time:',num2str(t),', student ',num2str(id),' leaveing queue process of node 4.']);
+                temp_t = t + (repast_sigma*rand() + repast_mu)*60; %repast
+                s(id).left_canteen_time = temp_t;
+                s(id).get_food_time = t;
+                %sent the served student to next node
+                Event_queue = insert_Event_queue_new(Event_queue, temp_t, 2,s(id).id);
+                disp(['Time:',num2str(temp_t),', student ',num2str(id),' leaveing queue process of node 4.']);
             else
                 wait_food_queue45 = [wait_food_queue45 id];
             end
@@ -504,14 +510,35 @@ while(~isempty(Event_queue) && t < endTime)
     end
 end
 
-tt = [];
+repast = [];
+left_elevator = [];
+elevator = [];
+queue_in_canteen = [];
 for i =1:student_num
     %if s(i).left_elevator ~= s(i).StartTime
-        tt = [tt s(i).left_canteen_time - s(i).left_elevator];
+    elevator = [elevator s(i).left_elevator-s(i).StartTime];
+    left_elevator = [left_elevator s(i).left_elevator];
+    queue_in_canteen = [queue_in_canteen s(i).get_food_time - s(i).left_elevator];
+    repast = [repast s(i).left_canteen_time - s(i).get_food_time];
     %end
 end
-plot(tt);
+figure
+plot(repast);
 set(gca,'XTick',0:1:100);
 grid on;
-mean(tt)
+
+figure
+plot(elevator);
+set(gca,'XTick',0:1:100);
+grid on;
+
+figure
+plot(queue_in_canteen);
+set(gca,'XTick',0:1:100);
+grid on;
+
+
+repast_mean = mean(repast)
+elevator_mean = mean(elevator)
+queue_in_canteen_mean = mean(queue_in_canteen)
 
