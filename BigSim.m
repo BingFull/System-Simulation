@@ -7,10 +7,10 @@ close all
 % hold on
 
 %init parameters in Canteen queuing system
-S23 = 100;
-s23 = 80;
-S45 = 100;
-s45 = 80;
+S23 = 80;
+s23 = 60;
+S45 = 80;
+s45 = 60;
 alpha = 14.8274; %Rayleigh distribution parameter
 
 get_up_mu_boy = 93.3616;
@@ -86,10 +86,10 @@ for t=1:student_num
     s(t).gender = randi(2,1);%1 for male and 2 for female
     if  s(t).gender == 1
         s(t).speed = 5;
-        s(t).StartTime = get_up_sigma_boy*rand() + get_up_mu_boy + wash_sigma_boy*rand() + wash_up_mu_boy;
+        s(t).StartTime = get_up_sigma_boy*rand() + get_up_mu_boy + (wash_sigma_boy*rand() + wash_up_mu_boy)*60;
     else
         s(t).speed = 3;
-        s(t).StartTime = get_up_sigma_girl*rand() + get_up_mu_girl + wash_up_sigma_girl*rand() + wash_up_mu_girl;
+        s(t).StartTime = get_up_sigma_girl*rand() + get_up_mu_girl + (wash_up_sigma_girl*rand() + wash_up_mu_girl)*60;
     end
     s(t).source = 1; % simple version for this demo
     s(t).dest = 6;
@@ -131,7 +131,7 @@ Event_queue = insert_Event_queue_new(Event_queue, supply_interval, -11, 0);
 Event_queue = insert_Event_queue_new(Event_queue, supply_interval, -11, 1);
 ttt = 0;
 
-endTime = 8000
+endTime = 10000
 
 %eventID:
 %1: leaving a node
@@ -251,7 +251,7 @@ while(~isempty(Event_queue) && t < endTime)
                 time_elevator_close = t + 10 + 50 * rand();
                 Event_queue = insert_Event_queue_new(Event_queue,time_elevator_close, -21, elevator_loc);
            else
-               % when the elevator don't stay when it is full
+               % when the elevator dont stay when it is full
                 Event_queue = insert_Event_queue_new(Event_queue,t+time_every_floor, -22, elevator_loc-1);
            end
        end
@@ -393,6 +393,7 @@ while(~isempty(Event_queue) && t < endTime)
         w(s(id).last_node,s(id).loc) = w(s(id).last_node,s(id).loc) - 1;
         disp(['Time:',num2str(t),', student ',num2str(id),' arrives node:',num2str(s(id).loc),' from node:',num2str(s(id).last_node)]);
         if s(id).loc == s(id).dest %arrival final dest
+            s(id).arrive_time = t;
             disp(['Time:',num2str(t),', student ',num2str(id),' arrives dest'])
         else
             Event_queue = insert_Event_queue_new(Event_queue, t, 1,s(id).id);%loop in the route
@@ -514,31 +515,48 @@ repast = [];
 left_elevator = [];
 elevator = [];
 queue_in_canteen = [];
+arrive_time = [];
 for i =1:student_num
     %if s(i).left_elevator ~= s(i).StartTime
     elevator = [elevator s(i).left_elevator-s(i).StartTime];
     left_elevator = [left_elevator s(i).left_elevator];
     queue_in_canteen = [queue_in_canteen s(i).get_food_time - s(i).left_elevator];
     repast = [repast s(i).left_canteen_time - s(i).get_food_time];
+    arrive_time = [arrive_time s(i).arrive_time];
     %end
 end
-figure
-plot(repast);
-set(gca,'XTick',0:1:100);
+
+figure('NumberTitle', 'off', 'Name', 'repast');
+plot(repast/60);
+set(gca,'XTick',0:5:100);
+xlabel('student id');
+ylabel('time/minute');
 grid on;
 
-figure
-plot(elevator);
-set(gca,'XTick',0:1:100);
+figure('NumberTitle', 'off', 'Name', 'elevator');
+plot(elevator/60);
+set(gca,'XTick',0:5:100);
+xlabel('student id');
+ylabel('time/minute');
 grid on;
 
-figure
-plot(queue_in_canteen);
-set(gca,'XTick',0:1:100);
+figure('NumberTitle', 'off', 'Name', 'queue_in_canteen');
+plot(queue_in_canteen/60);
+set(gca,'XTick',0:5:100);
+xlabel('student id');
+ylabel('time/minute');
+grid on;
+
+figure('NumberTitle', 'off', 'Name', 'arrive_time');
+plot(arrive_time/60);
+set(gca,'XTick',0:5:100);
+xlabel('student id');
+ylabel('time/minute');
 grid on;
 
 
-repast_mean = mean(repast)
-elevator_mean = mean(elevator)
-queue_in_canteen_mean = mean(queue_in_canteen)
+repast_mean = mean(repast/60)
+elevator_mean = mean(elevator/60)
+queue_in_canteen_mean = mean(queue_in_canteen/60)
+arrive_time_mean = mean(arrive_time/60)
 

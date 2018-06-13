@@ -13,6 +13,7 @@ classdef student
         floor
         left_elevator
         left_canteen_time
+        arrive_time
     end
     properties
         desitionG
